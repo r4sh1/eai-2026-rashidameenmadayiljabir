@@ -104,9 +104,9 @@ export const OUTPUT_PATH = path.join(PA1_ROOT, "out", "report.json");
  * properly. `TextDecoder` knows the label "windows-1257" — no dependency needed.
  */
 export function decodeOrderFile(bytes: Buffer): string {
-  throw new Error("TODO: decodeOrderFile is not implemented");
+  const decoder = new TextDecoder("windows-1257");
+  return decoder.decode(bytes);
 }
-
 /**
  * "01.09.2026" -> "2026-09-01"
  *
@@ -115,7 +115,8 @@ export function decodeOrderFile(bytes: Buffer): string {
  * that does not have one.
  */
 export function toIsoDate(ddmmyyyy: string): string {
-  throw new Error("TODO: toIsoDate is not implemented");
+  const [day, month, year] = ddmmyyyy.trim().split(".");
+  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -127,7 +128,7 @@ export function toIsoDate(ddmmyyyy: string): string {
  * parseFloat, and a test checks exactly that.
  */
 export function toDecimalString(amount: string): string {
-  throw new Error("TODO: toDecimalString is not implemented");
+  return amount.trim().replace(",", ".");
 }
 
 /**
@@ -138,7 +139,25 @@ export function toDecimalString(amount: string): string {
  * header row.
  */
 export function parseCustomers(csv: string): Map<string, string> {
-  throw new Error("TODO: parseCustomers is not implemented");
+  const customers = new Map<string, string>();
+  const lines = csv.split(/\r?\n/);
+
+  // Skip the header row.
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line === undefined || line.trim() === "") {
+      continue;
+    }
+
+    const [customerId, fullName] = line.split(";");
+
+    if (customerId !== undefined && fullName !== undefined) {
+      customers.set(customerId.trim(), fullName.trim());
+    }
+  }
+
+  return customers;
 }
 
 // ------------------------------------------------------------------ ingest --
@@ -160,7 +179,97 @@ export function parseCustomers(csv: string): Map<string, string> {
  *     into `unmatchedCustomers`.
  */
 export function ingest(options: IngestOptions): Report {
-  throw new Error("TODO: ingest is not implemented");
+  const orders: Order[] = [];
+  const rejected: RejectedRecord[] = [];
+
+  // Read orders as raw bytes because the file is CP1257.
+  const orderBytes = readFileSync(options.ordersPath);
+  const orderText = decodeOrderFile(orderBytes);
+
+  const lines = orderText.split(/\r?\n/);
+
+  // A final newline should not create a fake empty record.
+  if (lines.at(-1) === "") {
+    lines.pop();
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line === undefined) {
+      continue;
+    }
+
+    const lineNumber = i + 1;
+
+    // Every valid order must be exactly 77 characters.
+    if (line.length !== ORDER_LINE_LENGTH) {
+      rejected.push({
+        line: lineNumber,
+        raw: line,
+        reason: `Expected ${ORDER_LINE_LENGTH} characters, got ${line.length}`,
+      });
+
+      continue;
+    }
+
+    const order: Order = {
+      orderId: line
+        .slice(ORDER_LAYOUT.orderId[0], ORDER_LAYOUT.orderId[1])
+        .trim(),
+
+      customerId: line
+        .slice(ORDER_LAYOUT.customerId[0], ORDER_LAYOUT.customerId[1])
+        .trim(),
+
+      customerName: line
+        .slice(
+          ORDER_LAYOUT.customerName[0],
+          ORDER_LAYOUT.customerName[1],
+        )
+        .trim(),
+
+      orderDate: toIsoDate(
+        line.slice(
+          ORDER_LAYOUT.orderDate[0],
+          ORDER_LAYOUT.orderDate[1],
+        ),
+      ),
+
+      amount: toDecimalString(
+        line.slice(
+          ORDER_LAYOUT.amount[0],
+          ORDER_LAYOUT.amount[1],
+        ),
+      ),
+
+      currency: line
+        .slice(ORDER_LAYOUT.currency[0], ORDER_LAYOUT.currency[1])
+        .trim(),
+    };
+
+    orders.push(order);
+  }
+
+  // Read customers as UTF-8.
+  const customersCsv = readFileSync(options.customersPath, "utf8");
+  const customers = parseCustomers(customersCsv);
+
+  // Find customer IDs used by accepted orders.
+  const acceptedCustomerIds = new Set(
+    orders.map((order) => order.customerId),
+  );
+
+  // Customers in the master file who have no accepted order.
+  const unmatchedCustomers = [...customers.keys()].filter(
+    (customerId) => !acceptedCustomerIds.has(customerId),
+  );
+
+  return {
+    orders,
+    rejected,
+    unmatchedCustomers,
+  };
 }
 
 // -------------------------------------------------------------------- main --
