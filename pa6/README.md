@@ -464,3 +464,39 @@ asking a question — it will usually be faster.
 | Hardcoding `http://payment:4001` etc. | Breaks outside Docker Compose, and is penalized even when it happens to pass |
 | Treating `422` and `504` as interchangeable | `504` is reserved for the timeout-triggered path specifically |
 | An ADR that restates this README | 30% of the mark, and I have read this README |
+
+
+## AI usage
+
+I used Claude (Anthropic) for PA6.
+
+**What the AI did:** it explained the scaffold and wrote the drafts of
+`openapi.yaml`, `orchestrator/src/server.ts` and `docs/adr-005.md`. It also gave me
+the Docker, Spectral, test and git commands. I used these drafts as given and did
+not rewrite them myself.
+
+**What I did:**
+- I ran the baseline on the untouched scaffold first: 2 of 12 tests passed, and the
+  bad example failed Spectral with 13 errors.
+- I committed the contract before any orchestrator code (contract `3d35b4f`,
+  then the scaffold, then the saga), and pushed the history to GitHub.
+- I ran every check on my machine: Spectral exit 0, `tsc` clean, `npm test`
+  12 of 12, and manual checks for a replay, a changed body (409), a shipping
+  timeout (504 after 2.6 s), a failed refund (`compensation_failed`) and 21 items
+  (400).
+- The ADR facts come from my own runs: the timing, the trace, the stale
+  records in the store and the lint errors. I checked the ADR claims
+  against the code with Claude's help.
+- I downloaded a fresh copy of the repo and ran everything again: 12 of 12.
+
+**What I understood:**
+- Undo: when a step fails, `runSaga` undoes only the steps that finished, newest
+  first. `inventory_release` runs first, then `payment_refund`. Inventory was
+  reserved after payment, so it is undone first. Shipping and notification have
+  no undo, so they are skipped.
+- Idempotency: the code from reading the store to writing `in_progress` runs
+  without pausing, so no other request can get in between. If I wrote the record
+  after an `await`, a second request with the same key could start a second saga
+  and charge the customer twice.
+- Status codes: a timeout means the service did not answer, so I do not know what
+  happened. That is 504. A 422 means the service answered and refused.
