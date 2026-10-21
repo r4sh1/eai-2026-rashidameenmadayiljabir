@@ -1,0 +1,294 @@
+openapi: 3.0.3
+info:
+  title: Checkout Saga API
+  version: 1.0.0
+  description: >-
+    HTTP contract of the checkout orchestrator. One endpoint, POST /checkout,
+    takes a canonical order and runs four downstream calls one after another:
+    payment, inventory, shipping, notification. If a call fails or times out,
+    the orchestrator undoes inventory and payment in reverse order and then
+    answers. The answer is always the final state of the saga, never a
+    pending marker.
+  contact:
+    name: Course EAI 2026
+    url: https://evaluentis.leitass.eu
+servers:
+  - url: http://localhost:3000
+    description: Orchestrator started by docker compose.
+tags:
+  - name: checkout
+    description: Run and replay checkout sagas.
+  - name: ops
+    description: Liveness.
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness check
+      description: Answers 200 as long as the process can serve requests.
+      tags: [ops]
+      responses:
+        "200":
+          description: The orchestrator is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /checkout:
+    post:
+      operationId: submitCheckout
+      summary: Run the checkout saga for one canonical order
+      description: >-
+        Charges payment, reserves inventory, creates the shipment and sends the
+        notification, strictly in that order. Amount is the sum of unitPrice
+        times quantity, as a decimal string with two fraction digits. The
+        notification goes to customer.email. A failure after payment triggers
+        compensation in reverse order. Shipping and notification have no undo.
+        The same Idempotency-Key with the same body returns the stored answer
+        and does not run the saga again.
+      tags: [checkout]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >-
+            Client-chosen key, at most 128 characters. One key names one
+            checkout attempt. A repeat with an identical body replays the
+            stored answer.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      requestBody:
+        required: true
+        description: >-
+          The canonical order. Between 1 and 20 items. A body with more than 20
+          items is rejected with 400 before any downstream call.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Order"
+      responses:
+        "200":
+          description: All four steps succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SagaResult"
+        "400":
+          description: Idempotency-Key is missing, the body is not a canonical order, or it has more than 20 items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: >-
+            The key was used with a different body (idempotency_payload_mismatch),
+            or the first request with this key is still running (idempotency_conflict).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: >-
+            A step answered with a business failure. status is failed when
+            payment failed or when an undo call failed (code compensation_failed),
+            and compensated when the earlier steps were undone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SagaResult"
+        "504":
+          description: >-
+            A downstream call did not answer within the timeout. code is
+            timeout. status is failed if payment itself timed out, and
+            compensated if later steps were undone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SagaResult"
+        "500":
+          description: Unexpected orchestrator error, for example a store file that cannot be written. The key is released so the client can retry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+components:
+  schemas:
+    Health:
+      type: object
+      description: Liveness payload.
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: Always ok.
+          enum: [ok]
+    Problem:
+      type: object
+      description: Error body for requests that never reached the saga, or that hit an unexpected error.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable reason.
+          enum:
+            - validation_error
+            - idempotency_payload_mismatch
+            - idempotency_conflict
+            - internal_error
+        message:
+          type: string
+          description: Human-readable detail for the developer calling the API.
+    Address:
+      type: object
+      description: Delivery address.
+      additionalProperties: false
+      required: [street, city, postalCode, country]
+      properties:
+        street:
+          type: string
+          description: Street and number.
+        city:
+          type: string
+          description: City.
+        postalCode:
+          type: string
+          description: Postal code in local format.
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code.
+    Customer:
+      type: object
+      description: Person who placed the order.
+      additionalProperties: false
+      required: [name, email, address]
+      properties:
+        name:
+          type: string
+          description: Full name.
+        email:
+          type: string
+          format: email
+          description: Where the notification step sends its message.
+        address:
+          $ref: "#/components/schemas/Address"
+    Item:
+      type: object
+      description: One priced order line.
+      additionalProperties: false
+      required: [productId, productName, quantity, unitPrice, currency, taxRate]
+      properties:
+        productId:
+          type: string
+          pattern: "^PROD-[0-9]+$"
+          description: Product id in PROD-nnn form.
+        productName:
+          type: string
+          description: Display name.
+        quantity:
+          type: integer
+          minimum: 1
+          description: Units ordered.
+        unitPrice:
+          type: string
+          pattern: '^[0-9]+\.[0-9]{2}$'
+          description: Price per unit as a decimal string with two fraction digits. Never a JSON number.
+        currency:
+          type: string
+          description: Currency of unitPrice.
+        taxRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Tax as a fraction, 0.21 means 21 percent.
+    Order:
+      type: object
+      description: Canonical order, restated here with a bound on items.
+      additionalProperties: false
+      required: [orderId, orderType, source, receivedAt, orderDate, customer, items, currency, status]
+      properties:
+        orderId:
+          type: string
+          minLength: 1
+          description: Order id from the source system.
+        orderType:
+          type: string
+          enum: [standard, express, b2b]
+          description: Business type of the order.
+        source:
+          type: string
+          enum: [web, mobile, b2b]
+          description: Channel the order came from.
+        receivedAt:
+          type: string
+          format: date-time
+          description: When the translator produced the record.
+        orderDate:
+          type: string
+          format: date-time
+          description: When the customer placed the order, UTC.
+        customer:
+          $ref: "#/components/schemas/Customer"
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: Order lines. At most 20, enforced by the orchestrator.
+          items:
+            $ref: "#/components/schemas/Item"
+        currency:
+          type: string
+          description: Currency of the whole order.
+        status:
+          type: string
+          enum: [new, processing, shipped, delivered]
+          description: Order status when accepted.
+    TraceEntry:
+      type: object
+      description: One downstream call the saga made.
+      required: [step, status, startedAt, finishedAt, durationMs]
+      properties:
+        step:
+          type: string
+          enum: [payment, inventory, shipping, notification, inventory_release, payment_refund]
+          description: Which call this was. The last two are compensations.
+        status:
+          type: string
+          enum: [success, failed, timeout]
+          description: How the call ended.
+        startedAt:
+          type: string
+          format: date-time
+          description: When the call started.
+        finishedAt:
+          type: string
+          format: date-time
+          description: When the call ended.
+        durationMs:
+          type: integer
+          minimum: 0
+          description: Elapsed milliseconds.
+    SagaResult:
+      type: object
+      description: Final state of one saga.
+      required: [orderId, status, trace]
+      properties:
+        orderId:
+          type: string
+          description: Order id from the request.
+        status:
+          type: string
+          enum: [completed, failed, compensated]
+          description: Final saga state.
+        code:
+          type: string
+          description: >-
+            Present unless status is completed. timeout, compensation_failed,
+            or the code the failing service sent, for example payment_declined.
+        trace:
+          type: array
+          maxItems: 6
+          description: Every call made, in order, compensations included. A saga makes at most six calls.
+          items:
+            $ref: "#/components/schemas/TraceEntry"
