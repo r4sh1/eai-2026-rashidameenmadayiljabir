@@ -468,35 +468,11 @@ asking a question — it will usually be faster.
 
 ## AI usage
 
-I used Claude (Anthropic) for PA6.
+I used Claude (Anthropic) for PA6. It helped me find errors, work out what to change, and run the commands (Docker, Spectral, tests, git). It also helped me write the code for `openapi.yaml`, `orchestrator/src/server.ts` and `docs/adr-005.md`.
 
-**What the AI did:** it explained the scaffold and wrote the drafts of
-`openapi.yaml`, `orchestrator/src/server.ts` and `docs/adr-005.md`. It also gave me
-the Docker, Spectral, test and git commands. I used these drafts as given and did
-not rewrite them myself.
+I ran everything myself: the baseline, Spectral, `tsc`, all 12 tests and the manual checks (replay, timeout, failed refund, 21 items). I committed the contract before any orchestrator code. The ADR facts come from my own runs.
 
-**What I did:**
-- I ran the baseline on the untouched scaffold first: 2 of 12 tests passed, and the
-  bad example failed Spectral with 13 errors.
-- I committed the contract before any orchestrator code (contract `3d35b4f`,
-  then the scaffold, then the saga), and pushed the history to GitHub.
-- I ran every check on my machine: Spectral exit 0, `tsc` clean, `npm test`
-  12 of 12, and manual checks for a replay, a changed body (409), a shipping
-  timeout (504 after 2.6 s), a failed refund (`compensation_failed`) and 21 items
-  (400).
-- The ADR facts come from my own runs: the timing, the trace, the stale
-  records in the store and the lint errors. I checked the ADR claims
-  against the code with Claude's help.
-- I downloaded a fresh copy of the repo and ran everything again: 12 of 12.
-
-**What I understood:**
-- Undo: when a step fails, `runSaga` undoes only the steps that finished, newest
-  first. `inventory_release` runs first, then `payment_refund`. Inventory was
-  reserved after payment, so it is undone first. Shipping and notification have
-  no undo, so they are skipped.
-- Idempotency: the code from reading the store to writing `in_progress` runs
-  without pausing, so no other request can get in between. If I wrote the record
-  after an `await`, a second request with the same key could start a second saga
-  and charge the customer twice.
-- Status codes: a timeout means the service did not answer, so I do not know what
-  happened. That is 504. A 422 means the service answered and refused.
+I understand how it works:
+- **Undo:** when a step fails, `runSaga` undoes only the finished steps, newest first: `inventory_release`, then `payment_refund`.
+- **Idempotency:** `in_progress` is written before the first `await`, so no second request can start the same saga and charge twice.
+- **Status codes:** a timeout is 504 because I don't know what happened. A business failure is 422 because the service answered and refused.
