@@ -1,19 +1,8 @@
 /**
- * PA6 orchestrator scaffold — ported from the practice-03-orchestration JS lab.
- *
- * This scaffold is intentionally incomplete. `GET /health`, request validation
- * against the canonical order schema, the Idempotency-Key contract shell, and
- * restart-safe file persistence are already wired up. What is NOT implemented
- * is the actual saga:
- *
- *   1) payment authorize
- *   2) inventory reserve
- *   3) shipping create
- *   4) notification send
- *
- * with strict sequencing, trace recording, timeout handling, compensation
- * (in reverse order of completed steps), and the full idempotent-replay
- * policy. See the TODO block inside the POST /checkout handler.
+ * PA6 orchestrator. POST /checkout runs payment, inventory, shipping and
+ * notification strictly one after another. On a failure or a timeout it undoes
+ * inventory and payment in reverse order. Idempotency and saga records are kept
+ * in /data and survive a restart. The contract is ../openapi.yaml.
  */
 import fs from "node:fs";
 import path from "node:path";
