@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import express, { type Request, type Response } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import axios from "axios";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
@@ -209,11 +209,14 @@ interface SagaResult {
 function computeAmount(items: CanonicalOrder["items"]): string {
   let cents = 0n;
   for (const item of items) {
-    const [whole = "0", fraction = ""] = item.unitPrice.split(".");
-    const unitCents = BigInt(whole) * 100n + BigInt((fraction + "00").slice(0, 2));
-    cents += unitCents * BigInt(item.quantity);
+    const negative = item.unitPrice.startsWith("-");
+    const [whole = "0", fraction = ""] = item.unitPrice.replace("-", "").split(".");
+    const magnitude = BigInt(whole) * 100n + BigInt((fraction + "00").slice(0, 2));
+    cents += (negative ? -magnitude : magnitude) * BigInt(item.quantity);
   }
-  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
+  const sign = cents < 0n ? "-" : "";
+  const abs = cents < 0n ? -cents : cents;
+  return `${sign}${abs / 100n}.${(abs % 100n).toString().padStart(2, "0")}`;
 }
 
 function codeFromBody(data: unknown, fallback: string): string {
@@ -421,6 +424,20 @@ app.post("/checkout", async (req: Request, res: Response) => {
     }
     res.status(500).json({ code: "internal_error", message: "Unexpected error while running the saga" });
   }
+});
+
+// express.json() rejects a broken or oversized body before the route runs, and
+// its default answer is an HTML page. The contract promises the Problem shape.
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  const type = (err as { type?: unknown } | null)?.type;
+  if (typeof type === "string" && type.startsWith("entity.")) {
+    res.status(400).json({
+      code: "validation_error",
+      message: type === "entity.too.large" ? "Request body is too large" : "Request body is not valid JSON",
+    });
+    return;
+  }
+  next(err);
 });
 
 bootstrapStores();
