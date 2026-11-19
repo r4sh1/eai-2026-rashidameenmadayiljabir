@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1450" height="700" viewBox="0 0 1450 700">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#40556b"/></marker></defs>
+<style>
+text{font-family:Arial,sans-serif;fill:#1e293b}.task{fill:#fff;stroke:#40556b;stroke-width:2;rx:10}.event{fill:#fff;stroke:#40556b;stroke-width:2}.gateway{fill:#fff;stroke:#40556b;stroke-width:2}.flow{fill:none;stroke:#40556b;stroke-width:2;marker-end:url(#arrow)}.boundary{fill:#fff;stroke:#b45309;stroke-width:3}.timer{fill:#fff;stroke:#2563eb;stroke-width:3}.comp{fill:#fff7ed;stroke:#c2410c;stroke-width:2;rx:10}.label{font-size:14px;text-anchor:middle}.small{font-size:12px;fill:#475569}.title{font-size:22px;font-weight:bold}
+</style>
+<text x="40" y="35" class="title">Checkout saga — BPMN 2.0</text>
+<!-- main flow -->
+<path class="flow" d="M76 188 H110 M240 190 H290 M340 193 H590 M640 193 H690 M820 190 H880 M1010 190 H1070 M1220 190 H1280"/>
+<path class="flow" d="M315 168 V110 H390 M530 110 H565 V193 H590"/>
+<circle class="event" cx="58" cy="188" r="18"/><text x="58" y="222" class="small" text-anchor="middle">order.accepted</text>
+<rect class="task" x="110" y="150" width="130" height="80"/><text class="label" x="175" y="181"><tspan x="175">Normalize and</tspan><tspan x="175" dy="18">validate order</tspan></text>
+<polygon class="gateway" points="315,168 340,193 315,218 290,193"/><text class="small" x="315" y="148" text-anchor="middle">B2B?</text>
+<rect class="task" x="390" y="70" width="140" height="80"/><text class="label" x="460" y="101"><tspan x="460">Authorize payment</tspan><tspan x="460" dy="18">(non-B2B)</tspan></text>
+<polygon class="gateway" points="615,168 640,193 615,218 590,193"/><text class="small" x="615" y="148" text-anchor="middle">Merge</text>
+<rect class="task" x="690" y="150" width="130" height="80"/><text class="label" x="755" y="181"><tspan x="755">Reserve</tspan><tspan x="755" dy="18">inventory</tspan></text>
+<rect class="task" x="880" y="150" width="130" height="80"/><text class="label" x="945" y="181"><tspan x="945">Create</tspan><tspan x="945" dy="18">shipment</tspan></text>
+<rect class="task" x="1070" y="150" width="150" height="80"/><text class="label" x="1145" y="181"><tspan x="1145">Publish outcome /</tspan><tspan x="1145" dy="18">notify</tspan></text>
+<circle class="event" cx="1298" cy="190" r="18"/><circle class="event" cx="1298" cy="190" r="14"/><text x="1298" y="225" class="small" text-anchor="middle">completed</text>
+<text x="360" y="96" class="small">No: pay</text><text x="460" y="58" class="small">payment</text><text x="360" y="130" class="small">Yes: skip payment</text>
+<!-- boundary errors / timers -->
+<circle class="boundary" cx="223" cy="150" r="13"/><path d="M216 143 L230 157 M230 143 L216 157" stroke="#b45309" stroke-width="2"/><circle class="boundary" cx="458" cy="150" r="13"/><path d="M451 143 L465 157 M465 143 L451 157" stroke="#b45309" stroke-width="2"/>
+<circle class="timer" cx="508" cy="150" r="13"/><path d="M508 141 V150 L515 154" stroke="#2563eb" stroke-width="2" fill="none"/>
+<circle class="boundary" cx="753" cy="230" r="13"/><path d="M746 223 L760 237 M760 223 L746 237" stroke="#b45309" stroke-width="2"/>
+<circle class="timer" cx="798" cy="230" r="13"/><path d="M798 221 V230 L805 234" stroke="#2563eb" stroke-width="2" fill="none"/>
+<circle class="boundary" cx="943" cy="230" r="13"/><path d="M936 223 L950 237 M950 223 L936 237" stroke="#b45309" stroke-width="2"/>
+<circle class="timer" cx="988" cy="230" r="13"/><path d="M988 221 V230 L995 234" stroke="#2563eb" stroke-width="2" fill="none"/>
+<circle class="boundary" cx="1143" cy="230" r="13"/><path d="M1136 223 L1150 237 M1150 223 L1136 237" stroke="#b45309" stroke-width="2"/>
+<circle class="timer" cx="1188" cy="230" r="13"/><path d="M1188 221 V230 L1195 234" stroke="#2563eb" stroke-width="2" fill="none"/>
+<text x="40" y="280" class="small">Error boundary = compensate completed steps in reverse order. Blue clock = timeout. Retries are broker-managed.</text>
+<!-- compensation path -->
+<path class="flow" d="M753 243 V385 H800 M943 243 V320 H825 V360 M1143 243 V300 H825 V360 M850 385 H900 M1045 385 H1100 M1245 385 H1300"/>
+<polygon class="gateway" points="825,360 850,385 825,410 800,385"/><text class="small" x="825" y="345" text-anchor="middle">Error</text>
+<rect class="comp" x="900" y="345" width="145" height="80"/><text class="label" x="972" y="375"><tspan x="972">Release inventory</tspan><tspan x="972" dy="18">if reserved</tspan></text>
+<rect class="comp" x="1100" y="345" width="145" height="80"/><text class="label" x="1172" y="375"><tspan x="1172">Refund payment</tspan><tspan x="1172" dy="18">if authorized</tspan></text>
+<circle class="event" cx="1318" cy="385" r="18"/><circle class="event" cx="1318" cy="385" r="14"/><text x="1318" y="420" class="small" text-anchor="middle">compensated</text>
+<path class="flow" d="M458 163 V510 H610 M755 510 H1280 L1318 403"/>
+<rect class="comp" x="610" y="470" width="145" height="80"/><text class="label" x="682" y="500"><tspan x="682">Refund payment</tspan><tspan x="682" dy="18">if authorized</tspan></text>
+<!-- timeout and parked outcomes -->
+<path class="flow" d="M223 163 V520 H1320 M508 163 V570 H900 M798 243 V570 H900 M988 243 V570 H900 M1188 243 V570 H900"/>
+<circle class="event" cx="1340" cy="520" r="18"/><circle class="event" cx="1340" cy="520" r="14"/><text x="1340" y="555" class="small" text-anchor="middle">failed</text>
+<path class="flow" d="M1070 590 H1160"/>
+<rect class="task" x="900" y="550" width="170" height="80"/><text class="label" x="985" y="580"><tspan x="985">Retries exhausted:</tspan><tspan x="985" dy="18">park for operator</tspan></text>
+<circle class="event" cx="1178" cy="590" r="18"/><circle class="event" cx="1178" cy="590" r="14"/><text x="1178" y="625" class="small" text-anchor="middle">parked / needs_attention</text>
+<text x="40" y="675" class="small">Compensation is conditional: only completed, not-yet-compensated steps are reversed; B2B orders skip payment/refund.</text>
+</svg>

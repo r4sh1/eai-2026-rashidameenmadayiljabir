@@ -1,0 +1,347 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns0:definitions xmlns:ns0="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:ns2="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:ns3="http://www.omg.org/spec/DD/20100524/DC" xmlns:ns4="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_capstone" targetNamespace="https://capstone.example/bpmn">
+  <ns0:error id="Error_step_failed" name="Step failed" errorCode="STEP_FAILED" />
+  <ns0:message id="Message_order_accepted" name="order.accepted" />
+  <ns0:process id="Process_checkout" name="Checkout saga" isExecutable="false">
+    <ns0:startEvent id="Start_order_accepted" name="order.accepted">
+      <ns0:messageEventDefinition id="MessageStartDefinition" messageRef="Message_order_accepted" />
+      <ns0:outgoing>Flow_start_intake</ns0:outgoing>
+    </ns0:startEvent>
+    <ns0:task id="Task_normalize" name="Normalize and validate order">
+      <ns0:incoming>Flow_start_intake</ns0:incoming>
+      <ns0:outgoing>Flow_intake_b2b</ns0:outgoing>
+    </ns0:task>
+    <ns0:exclusiveGateway id="Gateway_b2b" name="B2B order?" gatewayDirection="Diverging">
+      <ns0:incoming>Flow_intake_b2b</ns0:incoming>
+      <ns0:outgoing>Flow_b2b_skip_payment</ns0:outgoing>
+      <ns0:outgoing>Flow_b2b_payment</ns0:outgoing>
+    </ns0:exclusiveGateway>
+    <ns0:task id="Task_payment" name="Authorize payment (non-B2B)">
+      <ns0:incoming>Flow_b2b_payment</ns0:incoming>
+      <ns0:outgoing>Flow_payment_inventory</ns0:outgoing>
+    </ns0:task>
+    <ns0:exclusiveGateway id="Gateway_payment_merge" name="Continue saga" gatewayDirection="Converging">
+      <ns0:incoming>Flow_b2b_skip_payment</ns0:incoming>
+      <ns0:incoming>Flow_payment_inventory</ns0:incoming>
+      <ns0:outgoing>Flow_merge_inventory</ns0:outgoing>
+    </ns0:exclusiveGateway>
+    <ns0:task id="Task_inventory" name="Reserve inventory">
+      <ns0:incoming>Flow_merge_inventory</ns0:incoming>
+      <ns0:outgoing>Flow_inventory_shipping</ns0:outgoing>
+    </ns0:task>
+    <ns0:task id="Task_shipping" name="Create shipment">
+      <ns0:incoming>Flow_inventory_shipping</ns0:incoming>
+      <ns0:outgoing>Flow_shipping_notification</ns0:outgoing>
+    </ns0:task>
+    <ns0:task id="Task_notification" name="Publish order outcome / notify">
+      <ns0:incoming>Flow_shipping_notification</ns0:incoming>
+      <ns0:outgoing>Flow_notification_complete</ns0:outgoing>
+    </ns0:task>
+    <ns0:endEvent id="End_completed" name="completed">
+      <ns0:incoming>Flow_notification_complete</ns0:incoming>
+    </ns0:endEvent>
+    <ns0:boundaryEvent id="Boundary_payment_error" name="Payment error" attachedToRef="Task_payment">
+      <ns0:errorEventDefinition id="PaymentErrorDefinition" errorRef="Error_step_failed" />
+      <ns0:outgoing>Flow_payment_error_refund</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:boundaryEvent id="Boundary_inventory_error" name="Inventory error" attachedToRef="Task_inventory">
+      <ns0:errorEventDefinition id="InventoryErrorDefinition" errorRef="Error_step_failed" />
+      <ns0:outgoing>Flow_inventory_error_release</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:boundaryEvent id="Boundary_shipping_error" name="Shipping error" attachedToRef="Task_shipping">
+      <ns0:errorEventDefinition id="ShippingErrorDefinition" errorRef="Error_step_failed" />
+      <ns0:outgoing>Flow_shipping_error_release</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:boundaryEvent id="Boundary_notification_error" name="Notification error" attachedToRef="Task_notification">
+      <ns0:errorEventDefinition id="NotificationErrorDefinition" errorRef="Error_step_failed" />
+      <ns0:outgoing>Flow_notification_error_release</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:boundaryEvent id="Boundary_payment_timer" name="Payment timeout" attachedToRef="Task_payment" cancelActivity="true">
+      <ns0:timerEventDefinition id="PaymentTimerDefinition">
+        <ns0:timeDuration>PT30S</ns0:timeDuration>
+      </ns0:timerEventDefinition>
+      <ns0:outgoing>Flow_payment_timeout</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:boundaryEvent id="Boundary_inventory_timer" name="Inventory timeout" attachedToRef="Task_inventory" cancelActivity="true">
+      <ns0:timerEventDefinition id="InventoryTimerDefinition">
+        <ns0:timeDuration>PT30S</ns0:timeDuration>
+      </ns0:timerEventDefinition>
+      <ns0:outgoing>Flow_inventory_timeout</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:boundaryEvent id="Boundary_shipping_timer" name="Shipping timeout" attachedToRef="Task_shipping" cancelActivity="true">
+      <ns0:timerEventDefinition id="ShippingTimerDefinition">
+        <ns0:timeDuration>PT30S</ns0:timeDuration>
+      </ns0:timerEventDefinition>
+      <ns0:outgoing>Flow_shipping_timeout</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:boundaryEvent id="Boundary_notification_timer" name="Notification timeout" attachedToRef="Task_notification" cancelActivity="true">
+      <ns0:timerEventDefinition id="NotificationTimerDefinition">
+        <ns0:timeDuration>PT30S</ns0:timeDuration>
+      </ns0:timerEventDefinition>
+      <ns0:outgoing>Flow_notification_timeout</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:task id="Task_compensate_inventory" name="Compensate: release inventory" isForCompensation="true" />
+    <ns0:task id="Task_compensate_payment" name="Compensate: refund payment" isForCompensation="true" />
+    <ns0:exclusiveGateway id="Gateway_error_route" name="Completed steps to compensate?" gatewayDirection="Diverging">
+      <ns0:incoming>Flow_inventory_error_release</ns0:incoming>
+      <ns0:incoming>Flow_shipping_error_release</ns0:incoming>
+      <ns0:incoming>Flow_notification_error_release</ns0:incoming>
+      <ns0:outgoing>Flow_error_to_inventory_comp</ns0:outgoing>
+    </ns0:exclusiveGateway>
+    <ns0:task id="Task_release_inventory" name="Release inventory if reserved">
+      <ns0:incoming>Flow_error_to_inventory_comp</ns0:incoming>
+      <ns0:outgoing>Flow_inventory_comp_refund</ns0:outgoing>
+    </ns0:task>
+    <ns0:task id="Task_refund_payment" name="Refund payment if authorized">
+      <ns0:incoming>Flow_inventory_comp_refund</ns0:incoming>
+      <ns0:outgoing>Flow_refund_compensated</ns0:outgoing>
+    </ns0:task>
+    <ns0:task id="Task_refund_payment_only" name="Refund payment if authorized">
+      <ns0:incoming>Flow_payment_error_refund</ns0:incoming>
+      <ns0:outgoing>Flow_payment_refund_compensated</ns0:outgoing>
+    </ns0:task>
+    <ns0:endEvent id="End_compensated" name="compensated">
+      <ns0:incoming>Flow_refund_compensated</ns0:incoming>
+      <ns0:incoming>Flow_payment_refund_compensated</ns0:incoming>
+    </ns0:endEvent>
+    <ns0:endEvent id="End_failed" name="failed">
+      <ns0:incoming>Flow_payment_timeout</ns0:incoming>
+      <ns0:incoming>Flow_inventory_timeout</ns0:incoming>
+      <ns0:incoming>Flow_shipping_timeout</ns0:incoming>
+      <ns0:incoming>Flow_notification_timeout</ns0:incoming>
+      <ns0:incoming>Flow_validation_failed</ns0:incoming>
+    </ns0:endEvent>
+    <ns0:endEvent id="End_parked" name="parked / needs_attention">
+      <ns0:incoming>Flow_manual_attention</ns0:incoming>
+    </ns0:endEvent>
+    <ns0:task id="Task_park_for_operator" name="Exhausted retries: park for operator">
+      <ns0:outgoing>Flow_manual_attention</ns0:outgoing>
+      <ns0:incoming>Flow_payment_timeout</ns0:incoming>
+      <ns0:incoming>Flow_inventory_timeout</ns0:incoming>
+      <ns0:incoming>Flow_shipping_timeout</ns0:incoming>
+      <ns0:incoming>Flow_notification_timeout</ns0:incoming>
+    </ns0:task>
+    <ns0:sequenceFlow id="Flow_start_intake" sourceRef="Start_order_accepted" targetRef="Task_normalize" />
+    <ns0:sequenceFlow id="Flow_intake_b2b" sourceRef="Task_normalize" targetRef="Gateway_b2b" />
+    <ns0:sequenceFlow id="Flow_b2b_skip_payment" name="Yes: skip payment" sourceRef="Gateway_b2b" targetRef="Gateway_payment_merge">
+      <ns0:conditionExpression xsi:type="bpmn:tFormalExpression">\${isB2B}</ns0:conditionExpression>
+    </ns0:sequenceFlow>
+    <ns0:sequenceFlow id="Flow_b2b_payment" name="No: authorize payment" sourceRef="Gateway_b2b" targetRef="Task_payment">
+      <ns0:conditionExpression xsi:type="bpmn:tFormalExpression">\${not isB2B}</ns0:conditionExpression>
+    </ns0:sequenceFlow>
+    <ns0:sequenceFlow id="Flow_payment_inventory" sourceRef="Task_payment" targetRef="Gateway_payment_merge" />
+    <ns0:sequenceFlow id="Flow_merge_inventory" sourceRef="Gateway_payment_merge" targetRef="Task_inventory" />
+    <ns0:sequenceFlow id="Flow_inventory_shipping" sourceRef="Task_inventory" targetRef="Task_shipping" />
+    <ns0:sequenceFlow id="Flow_shipping_notification" sourceRef="Task_shipping" targetRef="Task_notification" />
+    <ns0:sequenceFlow id="Flow_notification_complete" sourceRef="Task_notification" targetRef="End_completed" />
+    <ns0:sequenceFlow id="Flow_payment_error_refund" sourceRef="Boundary_payment_error" targetRef="Task_refund_payment_only" />
+    <ns0:sequenceFlow id="Flow_inventory_error_release" sourceRef="Boundary_inventory_error" targetRef="Gateway_error_route" />
+    <ns0:sequenceFlow id="Flow_shipping_error_release" sourceRef="Boundary_shipping_error" targetRef="Gateway_error_route" />
+    <ns0:sequenceFlow id="Flow_notification_error_release" sourceRef="Boundary_notification_error" targetRef="Gateway_error_route" />
+    <ns0:sequenceFlow id="Flow_error_to_inventory_comp" sourceRef="Gateway_error_route" targetRef="Task_release_inventory" />
+    <ns0:sequenceFlow id="Flow_inventory_comp_refund" sourceRef="Task_release_inventory" targetRef="Task_refund_payment" />
+    <ns0:sequenceFlow id="Flow_refund_compensated" sourceRef="Task_refund_payment" targetRef="End_compensated" />
+    <ns0:sequenceFlow id="Flow_payment_refund_compensated" sourceRef="Task_refund_payment_only" targetRef="End_compensated" />
+    <ns0:sequenceFlow id="Flow_payment_timeout" sourceRef="Boundary_payment_timer" targetRef="Task_park_for_operator" />
+    <ns0:sequenceFlow id="Flow_inventory_timeout" sourceRef="Boundary_inventory_timer" targetRef="Task_park_for_operator" />
+    <ns0:sequenceFlow id="Flow_shipping_timeout" sourceRef="Boundary_shipping_timer" targetRef="Task_park_for_operator" />
+    <ns0:sequenceFlow id="Flow_notification_timeout" sourceRef="Boundary_notification_timer" targetRef="Task_park_for_operator" />
+    <ns0:sequenceFlow id="Flow_manual_attention" sourceRef="Task_park_for_operator" targetRef="End_parked" />
+    <ns0:boundaryEvent id="Boundary_validation_error" name="Invalid order" attachedToRef="Task_normalize">
+      <ns0:errorEventDefinition id="ValidationErrorDefinition" errorRef="Error_step_failed" />
+      <ns0:outgoing>Flow_validation_failed</ns0:outgoing>
+    </ns0:boundaryEvent>
+    <ns0:sequenceFlow id="Flow_validation_failed" sourceRef="Boundary_validation_error" targetRef="End_failed" />
+  </ns0:process>
+  <ns2:BPMNDiagram id="BPMNDiagram_1">
+    <ns2:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_checkout">
+      <ns2:BPMNShape id="Start_order_accepted_di" bpmnElement="Start_order_accepted">
+        <ns3:Bounds x="40" y="170" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_normalize_di" bpmnElement="Task_normalize">
+        <ns3:Bounds x="110" y="150" width="130" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Gateway_b2b_di" bpmnElement="Gateway_b2b">
+        <ns3:Bounds x="290" y="168" width="50" height="50" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_payment_di" bpmnElement="Task_payment">
+        <ns3:Bounds x="390" y="70" width="140" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Gateway_payment_merge_di" bpmnElement="Gateway_payment_merge">
+        <ns3:Bounds x="590" y="168" width="50" height="50" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_inventory_di" bpmnElement="Task_inventory">
+        <ns3:Bounds x="690" y="150" width="130" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_shipping_di" bpmnElement="Task_shipping">
+        <ns3:Bounds x="880" y="150" width="130" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_notification_di" bpmnElement="Task_notification">
+        <ns3:Bounds x="1070" y="150" width="150" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="End_completed_di" bpmnElement="End_completed">
+        <ns3:Bounds x="1280" y="172" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Boundary_payment_error_di" bpmnElement="Boundary_payment_error">
+        <ns3:Bounds x="440" y="135" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Boundary_inventory_error_di" bpmnElement="Boundary_inventory_error">
+        <ns3:Bounds x="735" y="215" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Boundary_shipping_error_di" bpmnElement="Boundary_shipping_error">
+        <ns3:Bounds x="925" y="215" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Boundary_notification_error_di" bpmnElement="Boundary_notification_error">
+        <ns3:Bounds x="1125" y="215" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Boundary_payment_timer_di" bpmnElement="Boundary_payment_timer">
+        <ns3:Bounds x="490" y="135" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Boundary_inventory_timer_di" bpmnElement="Boundary_inventory_timer">
+        <ns3:Bounds x="780" y="215" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Boundary_shipping_timer_di" bpmnElement="Boundary_shipping_timer">
+        <ns3:Bounds x="970" y="215" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Boundary_notification_timer_di" bpmnElement="Boundary_notification_timer">
+        <ns3:Bounds x="1170" y="215" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Gateway_error_route_di" bpmnElement="Gateway_error_route">
+        <ns3:Bounds x="800" y="360" width="50" height="50" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_release_inventory_di" bpmnElement="Task_release_inventory">
+        <ns3:Bounds x="900" y="345" width="145" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_refund_payment_di" bpmnElement="Task_refund_payment">
+        <ns3:Bounds x="1100" y="345" width="145" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_refund_payment_only_di" bpmnElement="Task_refund_payment_only">
+        <ns3:Bounds x="610" y="470" width="145" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="End_compensated_di" bpmnElement="End_compensated">
+        <ns3:Bounds x="1300" y="365" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="End_failed_di" bpmnElement="End_failed">
+        <ns3:Bounds x="1320" y="520" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="Task_park_for_operator_di" bpmnElement="Task_park_for_operator">
+        <ns3:Bounds x="900" y="550" width="170" height="80" />
+      </ns2:BPMNShape>
+      <ns2:BPMNShape id="End_parked_di" bpmnElement="End_parked">
+        <ns3:Bounds x="1160" y="572" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNEdge id="Flow_start_intake_di" bpmnElement="Flow_start_intake">
+        <ns4:waypoint x="76" y="188" />
+        <ns4:waypoint x="110" y="190" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_intake_b2b_di" bpmnElement="Flow_intake_b2b">
+        <ns4:waypoint x="240" y="190" />
+        <ns4:waypoint x="290" y="193" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_b2b_skip_payment_di" bpmnElement="Flow_b2b_skip_payment">
+        <ns4:waypoint x="315" y="168" />
+        <ns4:waypoint x="315" y="115" />
+        <ns4:waypoint x="590" y="115" />
+        <ns4:waypoint x="590" y="168" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_b2b_payment_di" bpmnElement="Flow_b2b_payment">
+        <ns4:waypoint x="315" y="168" />
+        <ns4:waypoint x="315" y="110" />
+        <ns4:waypoint x="390" y="110" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_payment_inventory_di" bpmnElement="Flow_payment_inventory">
+        <ns4:waypoint x="530" y="110" />
+        <ns4:waypoint x="565" y="110" />
+        <ns4:waypoint x="565" y="193" />
+        <ns4:waypoint x="590" y="193" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_merge_inventory_di" bpmnElement="Flow_merge_inventory">
+        <ns4:waypoint x="640" y="193" />
+        <ns4:waypoint x="690" y="190" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_inventory_shipping_di" bpmnElement="Flow_inventory_shipping">
+        <ns4:waypoint x="820" y="190" />
+        <ns4:waypoint x="880" y="190" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_shipping_notification_di" bpmnElement="Flow_shipping_notification">
+        <ns4:waypoint x="1010" y="190" />
+        <ns4:waypoint x="1070" y="190" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_notification_complete_di" bpmnElement="Flow_notification_complete">
+        <ns4:waypoint x="1220" y="190" />
+        <ns4:waypoint x="1280" y="190" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_payment_error_refund_di" bpmnElement="Flow_payment_error_refund">
+        <ns4:waypoint x="458" y="171" />
+        <ns4:waypoint x="458" y="510" />
+        <ns4:waypoint x="610" y="510" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_inventory_error_release_di" bpmnElement="Flow_inventory_error_release">
+        <ns4:waypoint x="753" y="251" />
+        <ns4:waypoint x="753" y="385" />
+        <ns4:waypoint x="800" y="385" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_shipping_error_release_di" bpmnElement="Flow_shipping_error_release">
+        <ns4:waypoint x="943" y="251" />
+        <ns4:waypoint x="943" y="320" />
+        <ns4:waypoint x="825" y="320" />
+        <ns4:waypoint x="825" y="360" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_notification_error_release_di" bpmnElement="Flow_notification_error_release">
+        <ns4:waypoint x="1143" y="251" />
+        <ns4:waypoint x="1143" y="300" />
+        <ns4:waypoint x="825" y="300" />
+        <ns4:waypoint x="825" y="360" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_error_to_inventory_comp_di" bpmnElement="Flow_error_to_inventory_comp">
+        <ns4:waypoint x="850" y="385" />
+        <ns4:waypoint x="900" y="385" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_inventory_comp_refund_di" bpmnElement="Flow_inventory_comp_refund">
+        <ns4:waypoint x="1045" y="385" />
+        <ns4:waypoint x="1100" y="385" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_refund_compensated_di" bpmnElement="Flow_refund_compensated">
+        <ns4:waypoint x="1245" y="385" />
+        <ns4:waypoint x="1300" y="383" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_payment_refund_compensated_di" bpmnElement="Flow_payment_refund_compensated">
+        <ns4:waypoint x="755" y="510" />
+        <ns4:waypoint x="1280" y="510" />
+        <ns4:waypoint x="1318" y="401" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_payment_timeout_di" bpmnElement="Flow_payment_timeout">
+        <ns4:waypoint x="508" y="171" />
+        <ns4:waypoint x="508" y="540" />
+        <ns4:waypoint x="1320" y="540" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_inventory_timeout_di" bpmnElement="Flow_inventory_timeout">
+        <ns4:waypoint x="798" y="251" />
+        <ns4:waypoint x="798" y="530" />
+        <ns4:waypoint x="1320" y="530" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_shipping_timeout_di" bpmnElement="Flow_shipping_timeout">
+        <ns4:waypoint x="988" y="251" />
+        <ns4:waypoint x="988" y="550" />
+        <ns4:waypoint x="1320" y="550" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_notification_timeout_di" bpmnElement="Flow_notification_timeout">
+        <ns4:waypoint x="1188" y="251" />
+        <ns4:waypoint x="1188" y="560" />
+        <ns4:waypoint x="1320" y="560" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNEdge id="Flow_manual_attention_di" bpmnElement="Flow_manual_attention">
+        <ns4:waypoint x="1070" y="590" />
+        <ns4:waypoint x="1160" y="590" />
+      </ns2:BPMNEdge>
+      <ns2:BPMNShape id="Boundary_validation_error_di" bpmnElement="Boundary_validation_error">
+        <ns3:Bounds x="205" y="135" width="36" height="36" />
+      </ns2:BPMNShape>
+      <ns2:BPMNEdge id="Flow_validation_failed_di" bpmnElement="Flow_validation_failed">
+        <ns2:waypoint x="223" y="171" />
+        <ns2:waypoint x="223" y="520" />
+        <ns2:waypoint x="1320" y="520" />
+      </ns2:BPMNEdge>
+    </ns2:BPMNPlane>
+  </ns2:BPMNDiagram>
+</ns0:definitions>

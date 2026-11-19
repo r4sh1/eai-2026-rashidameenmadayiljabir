@@ -1,0 +1,11 @@
+
+{
+  "name": "capstone-observer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
+  }
+}
