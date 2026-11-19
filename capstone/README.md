@@ -59,6 +59,22 @@ Submit an order with `POST http://localhost:8800/orders` using one of the fixtur
 
 The provider mock administration endpoints are available on ports 4801–4804. Their `/admin/config`, `/admin/logs` and `/admin/effects` endpoints are used for controlled failure tests and effect verification.
 
+## Operational alerts
+
+The observer exposes operational alerts through `GET http://localhost:8801/ops/metrics`. The following conditions are calculated from RabbitMQ queue statistics and the hand-rolled saga store:
+
+| Alert | Firing condition |
+|---|---|
+| `dlq_not_empty` | Ready plus unacknowledged messages in `orders.dlq` is greater than 0. |
+| `invalid_not_empty` | Ready plus unacknowledged messages in `orders.invalid` is greater than 0. |
+| `saga_consumer_missing` | `saga.queue` has zero consumers. |
+| `notifier_consumer_missing` | `notifications.queue` has zero consumers. |
+| `saga_consumer_lag` | Ready messages in `saga.queue` are greater than 3. |
+| `notifier_consumer_lag` | Ready messages in `notifications.queue` are greater than 3. |
+| `stuck_sagas` | The stuck-saga count returned by the observer is greater than 0. |
+
+The consumer-lag threshold is strictly greater than 3, so exactly 3 ready messages do not fire a lag alert. Consumer-missing alerts use consumer counts; lag alerts use ready-message counts only. A provider error does not automatically fire an alert: an alert fires only when its corresponding condition above is met.
+
 ## Tests
 
 Run the public tests from the project root:

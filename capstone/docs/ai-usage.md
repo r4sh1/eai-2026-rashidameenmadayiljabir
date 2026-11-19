@@ -49,16 +49,20 @@ I used the public test suite and manual checks to verify my work.
 
 - The latest recorded local public-test run before this final review passed 30 tests across the seven stage files (stages 0–6).
 - I inspected the current stage 6 test source and checked the document headings, diagrams, patterns table, runbook sections and BPMN structure.
-- The final README, ADR-011 and workflow-start trace changes in this review still need a fresh test run in the project environment.
+- On 19 November 2026, I downloaded a fresh copy of the repository and installed its dependencies with `npm ci`.
+- I ran `npx tsc --noEmit` successfully and checked the Docker Compose configuration.
+- I built and started the Compose stack from that fresh copy. All 12 services started; the 11 services with health checks reported healthy.
+- I ran the public test suite with `npx vitest run --config vitest.config.ts --root tests`. All 7 test files and all 30 tests passed.
+- I have not yet completed the separate manual Temporal checks T1–T7, so I do not claim that the advanced component has passed all of them.
 - I inspected `rabbitmq/definitions.json` to confirm the actual exchanges, queues and routing bindings.
 - I tested the payment retry behaviour by configuring the payment mock to fail twice and then succeed. The order completed after three attempts, and the payment effect occurred only once.
 - I tested a permanent payment failure. The order was parked after the retry attempts and appeared in the dead-letter queue.
 - I inspected the order status and trace information to understand the processing steps and retry behaviour.
 
-The current review environment could not rerun the project suite: the archive does not include the platform-compatible test dependencies, and Docker is unavailable here. The final changes must be checked with the test command above on the project machine.
+These checks were run on my project machine using the fresh repository copy. I still need to complete and record the manual Temporal checks T1–T7 separately.
 
 ## Dependencies beyond the allow-list
 
-None intentionally added beyond the dependencies permitted by the capstone requirements.
+- **Axios (`axios`, worker dependency):** I use Axios in the Temporal worker to send HTTP requests to the payment, inventory, shipping and notification provider services. It also lets the worker inspect HTTP error responses and distinguish non-retryable 4xx responses from retryable provider or network failures. Axios is declared in `worker/package.json` and locked in `worker/package-lock.json`.
 
-I used the existing project dependencies and tools to develop, run and test the application. ChatGPT was used for assistance and is not an application dependency.
+ChatGPT was used for development assistance; it is not an application runtime dependency.
