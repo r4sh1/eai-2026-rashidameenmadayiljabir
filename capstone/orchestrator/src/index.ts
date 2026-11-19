@@ -1070,7 +1070,7 @@ async function compensateSagaAsOperator(
     return {
       status: 409,
       body: {
-        code: "temporal_operator_compensation_unsupported"
+        code: "saga_not_stuck"
       }
     };
   }
